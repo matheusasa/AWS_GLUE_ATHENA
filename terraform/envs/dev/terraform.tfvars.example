@@ -1,0 +1,11 @@
+# Copie este arquivo para terraform.tfvars e ajuste os valores.
+# NÃO versionar terraform.tfvars (pode conter particularidades do seu ambiente).
+
+regiao        = "sa-east-1"
+ambiente      = "dev"
+projeto       = "treinamento"
+centro_custo  = "CC-1001"
+
+# Sufixo ÚNICO (seu, para não conflitar com nomes globais de bucket).
+# Use iniciais + números. Ex.: "abc123".
+sufixo_unico  = "COLOQUE-AQUI-SEU-SUFIXO"

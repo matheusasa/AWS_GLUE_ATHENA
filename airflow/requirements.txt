@@ -1,0 +1,3 @@
+# Dependências do Airflow (para o DAG usar AwsGlueJobOperator).
+# No MWAA, suba este arquivo para s3://<bucket-mwaa>/requirements.txt.
+apache-airflow-providers-amazon>=8.0.0

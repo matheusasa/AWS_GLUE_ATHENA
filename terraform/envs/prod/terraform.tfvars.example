@@ -1,0 +1,5 @@
+regiao        = "sa-east-1"
+ambiente      = "prod"
+projeto       = "treinamento"
+centro_custo  = "CC-1001"
+sufixo_unico  = "COLOQUE-AQUI-SEU-SUFIXO"
