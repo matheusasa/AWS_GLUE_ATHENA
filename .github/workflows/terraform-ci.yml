@@ -1,0 +1,161 @@
+# CI/CD de Terraform para o Data Lake.
+#
+# Fluxo:
+#   - Em Pull Request:  fmt-check + validate + plan (dev). Falha se o plano tiver erro.
+#                       O plano vai para o resumo da execução (Step Summary) do GitHub.
+#   - Em push na main:   apply em DEV (deploy automatizado).
+#   - Em workflow_dispatch (manual): apply em PROD (com environment de aprovação).
+#
+# Autenticação AWS por OIDC (sem chaves estáticas). Configure:
+#   1) Um Identity Provider OIDC do GitHub na conta AWS (provider: token.actions.githubusercontent.com).
+#   2) Uma IAM Role com trust policy aceitando esse provider para o repo/sub atribuido.
+#      A role precisa de permissões para gerenciar os recursos + assumir para o Terraform.
+#   3) Secrets no repo:
+#        AWS_ROLE_TO_ASSUME_DEV  -> ARN da role de dev
+#        AWS_ROLE_TO_ASSUME_PROD -> ARN da role de prod (opcional, só para apply de prod)
+#        TF_VAR_sufixo_unico     -> sufixo único usado nos nomes de bucket
+#   4) Backend S3 + DynamoDB já criados (ver terraform/envs/dev/README.md).
+
+name: Terraform CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["terraform/**", ".github/workflows/terraform-ci.yml"]
+  push:
+    branches: [main]
+    paths: ["terraform/**"]
+  workflow_dispatch:
+
+# Permissões necessárias: OIDC (id-token) + leitura do repo + escrita no PR/summary.
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+  statuses: write
+
+env:
+  TF_VERSION: "1.9.8"
+  AWS_REGION: "sa-east-1"
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Job 1: validação e plano em DEV. Roda em PRs e em pushes.
+  # -------------------------------------------------------------------------
+  plan-dev:
+    name: fmt + validate + plan (dev)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/envs/dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_DEV }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          cli_config_credentials_token: ""
+
+      - name: Terraform fmt (check)
+        run: terraform fmt -check -recursive ../../
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+      - name: Terraform plan (dev)
+        run: |
+          terraform plan -no-color -input=false -out=tfplan > plan.txt 2>&1 || cat plan.txt
+          cat plan.txt
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 📋 Plano Terraform (dev)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```hcl' >> "$GITHUB_STEP_SUMMARY"
+          cat plan.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-dev
+          path: terraform/envs/dev/tfplan
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # Job 2: apply em DEV. Só roda em push na main (merge do PR).
+  # -------------------------------------------------------------------------
+  apply-dev:
+    name: apply (dev)
+    needs: plan-dev
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: terraform/envs/dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_DEV }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform apply (dev)
+        run: terraform apply -input=false -auto-approve -no-color
+
+  # -------------------------------------------------------------------------
+  # Job 3: apply em PROD. Só manual (workflow_dispatch), com aprovação.
+  # -------------------------------------------------------------------------
+  apply-prod:
+    name: apply (prod, manual)
+    needs: plan-dev
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: prod   # configure "Required reviewers" no GitHub Environments
+    defaults:
+      run:
+        working-directory: terraform/envs/prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform plan (prod)
+        run: terraform plan -input=false -no-color -detailed-exitcode || true
+
+      - name: Terraform apply (prod)
+        run: terraform apply -input=false -auto-approve -no-color

@@ -30,7 +30,12 @@ treinamento-terraform-aws-glue/
 │   ├── 09-governanca-boas-praticas.md
 │   ├── 10-laboratorios-exercicios.md
 │   ├── 11-orquestracao-step-functions.md
-│   └── 12-orquestracao-airflow.md
+│   ├── 12-orquestracao-airflow.md
+│   └── 13-cicd-github-actions.md
+├── .github/                    # CI/CD com GitHub Actions (workflows + README)
+│   └── workflows/
+│       ├── terraform-ci.yml    # fmt/validate/plan/apply (OIDC, gates dev/prod)
+│       └── python-ci.yml       # py_compile + flake8 + smoke test (Faker)
 ├── terraform/                  # Infraestrutura como código (funcional)
 │   ├── modules/                # Módulos reutilizáveis
 │   │   ├── s3_data_lake/
@@ -71,6 +76,7 @@ treinamento-terraform-aws-glue/
 10. **`docs/10-laboratorios-exercicios.md`** — Laboratórios práticos guiados com soluções.
 11. **`docs/11-orquestracao-step-functions.md`** — Orquestração com AWS Step Functions (`.sync`, Retry/Catch, agendamento).
 12. **`docs/12-orquestracao-airflow.md`** — Orquestração com Apache Airflow (MWAA, DAG, `AwsGlueJobOperator`, backfill).
+13. **`docs/13-cicd-github-actions.md`** — CI/CD com GitHub Actions (OIDC, gates dev/prod, pipelines do projeto).
 
 ---
 
@@ -85,12 +91,4 @@ treinamento-terraform-aws-glue/
 
 ---
 
-## O que você vai ser capaz de fazer ao final
-
-- Provisionar um Data Lake completo na AWS **apenas com código** (S3 + Catálogo Glue + Jobs + IAM + Athena).
-- Replicar o ambiente entre **dev e prod** com módulos e workspaces.
-- Escrever jobs **PySpark no Glue** do básico ao avançado, com boas práticas de performance.
-- Implementar a **Arquitetura Medalhão** de ponta a ponta.
-- Aplicar **governança, segurança e controle de custo**.
-
-Bom estudo! 🚀
+## O que você vai 

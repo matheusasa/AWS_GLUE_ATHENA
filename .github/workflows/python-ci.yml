@@ -1,0 +1,88 @@
+# CI de Python para os scripts do projeto:
+#   - Glue jobs (glue-jobs/*.py) + common (glue_utils.py)
+#   - DAG do Airflow (airflow/dags/*.py)
+#   - Gerador de dados (data/sample/generate_data.py)
+#
+# O que valida:
+#   1) py_compile de todos os .py (sintaxe).
+#   2) flake8 (estilo, configurado para não falhar em itens leves).
+#   3) Smoke test: instala o faker e roda o generate_data.py com poucos dados.
+#
+# Observação: os jobs Glue só rodam de verdade dentro do AWS Glue (dependem
+# de `awsglue.*`), por isso não há "teste de execução" aqui — só de sintaxe.
+# Para testar a LÓGICA das transformações, abstraia funções puras e teste-as.
+
+name: Python CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "glue-jobs/**"
+      - "airflow/**"
+      - "data/sample/*.py"
+      - ".github/workflows/python-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "glue-jobs/**"
+      - "airflow/**"
+      - "data/sample/*.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-check:
+    name: sintaxe + estilo + smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Instala dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 faker
+
+      - name: py_compile (sintaxe de todos os .py)
+        run: |
+          echo "Compilando todos os scripts Python..."
+          find glue-jobs airflow data/sample -name "*.py" -print0 | xargs -0 -n1 python -m py_compile
+          echo "OK: todos compilaram."
+
+      - name: flake8 (estilo)
+        run: |
+          # Falha só em erros graves (E9 runtime, F unused/undefined). O resto é warning.
+          flake8 glue-jobs airflow data/sample --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Limite de complexidade/linhas como aviso (não falha):
+          flake8 glue-jobs airflow data/sample --count --max-line-length=120 --statistics || true
+
+      - name: Smoke test do gerador de dados (Faker)
+        run: |
+          echo "Rodando generate_data.py (volume pequeno, com dirty + pii)..."
+          python data/sample/generate_data.py \
+            --clientes 10 --produtos 10 --vendas 50 --dirty 0.05 --with-pii --outdir /tmp/gen
+          echo "Arquivos gerados:"
+          ls -la /tmp/gen
+          test -s /tmp/gen/vendas.csv || { echo "ERRO: vendas.csv vazio"; exit 1; }
+          test -s /tmp/gen/clientes_pii.csv || { echo "ERRO: clientes_pii.csv vazio"; exit 1; }
+          echo "OK: gerador produziu arquivos não vazios."
+
+      - name: Valida JSON do template ASL (Step Functions)
+        run: |
+          python - <<'PY'
+          import json, re
+          tpl = open("terraform/modules/step_function_pipeline/statemachine.asl.json.tpl").read()
+          vals = {"bronze_job":"x","silver_job":"y","gold_job":"z"}
+          rendered = re.sub(r"\$\{(\w+)\}", lambda m: vals[m.group(1)], tpl)
+          json.loads(rendered)
+          print("ASL: JSON válido.")
+          PY
