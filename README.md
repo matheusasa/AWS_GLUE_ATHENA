@@ -91,4 +91,12 @@ treinamento-terraform-aws-glue/
 
 ---
 
-## O que você vai 
+## O que você vai ser capaz de fazer ao final
+
+- Provisionar um Data Lake completo na AWS **apenas com código** (S3 + Catálogo Glue + Jobs + IAM + Athena).
+- Replicar o ambiente entre **dev e prod** com módulos e workspaces.
+- Escrever jobs **PySpark no Glue** do básico ao avançado, com boas práticas de performance.
+- Implementar a **Arquitetura Medalhão** de ponta a ponta.
+- Aplicar **governança, segurança e controle de custo**.
+
+Bom estudo! 🚀
